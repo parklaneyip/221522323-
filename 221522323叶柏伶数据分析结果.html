@@ -1,0 +1,365 @@
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib
+
+# 显示中文
+matplotlib.rcParams['font.sans-serif'] = ['SimHei']
+# 正常显示负号
+matplotlib.rcParams['axes.unicode_minus'] = False
+
+# 读取数据
+file_path = '可视化.xlsx'  # 请替换为你的文件路径
+data = pd.read_excel(file_path)
+
+# 确保所有列为pandas支持的类型
+for col in data.columns:
+    if data[col].dtype == 'object':
+        data[col] = data[col].astype(str)
+
+# 定义变量
+dependent_variable = 'ER'  # 因变量
+independent_variable = 'RD'  # 自变量
+mediator_variable = 'GS'  # 中介变量
+control_variables = ['RS', 'AC', 'LLR', 'GDP', 'IO', 'PD', 'EDU']  # 控制变量
+
+# 总效应模型：ER ~ RD + 控制变量
+total_effect_model = ols(f'{dependent_variable} ~ {independent_variable} + {" + ".join(control_variables)}', data=data).fit()
+print("总效应模型结果：")
+print(total_effect_model.summary())
+
+# 中介效应模型：ER ~ GS + RD + 控制变量
+mediator_model = ols(f'{dependent_variable} ~ {mediator_variable} + {independent_variable} + {" + ".join(control_variables)}', data=data).fit()
+print("\n中介效应模型结果：")
+print(mediator_model.summary())
+
+# 中介变量模型：GS ~ RD + 控制变量
+mediator_regression_model = ols(f'{mediator_variable} ~ {independent_variable} + {" + ".join(control_variables)}', data=data).fit()
+print("\n中介变量模型结果：")
+print(mediator_regression_model.summary())
+
+# 计算中介效应和直接效应
+a = mediator_regression_model.params[independent_variable]  # 自变量对中介变量的影响
+b = mediator_model.params[mediator_variable]  # 中介变量对因变量的影响
+c = total_effect_model.params[independent_variable]  # 总效应
+c_prime = mediator_model.params[independent_variable]  # 自变量对因变量的直接效应
+
+mediation_effect = a * b  # 中介效应
+direct_effect = c_prime  # 直接效应
+
+print(f"\n中介效应（a*b）：{mediation_effect}")
+print(f"直接效应（c'）：{direct_effect}")
+print(f"总效应（c）：{c}")
+print(f"中介效应占总效应的比例：{mediation_effect / c}")
+
+# 可视化分析
+
+# 1. 机器人密度与就业率的关系图（散点图）
+plt.figure(figsize=(10, 6))
+sns.regplot(x=independent_variable, y=dependent_variable, data=data, lowess=True, scatter_kws={'alpha': 0.5})
+plt.title('机器人密度与就业率的关系（H1和H2）')
+plt.xlabel('机器人密度')
+plt.ylabel('就业率')
+plt.grid(True)
+plt.show()
+
+# 2. 不同经济发展水平下机器人密度对就业率的影响图（分组条形图）
+data['High_GDP'] = data['GDP'] > 80000  # 假设GDP单位为元
+data['High_GDP_Label'] = data['High_GDP'].map({True: '高于8万元', False: '低于8万元'})
+plt.figure(figsize=(10, 6))
+sns.barplot(x='High_GDP_Label', y=dependent_variable, data=data, palette='viridis')
+plt.title('不同经济发展水平下机器人密度对就业率的影响（H3）')
+plt.xlabel('人均GDP是否超过8万元')
+plt.ylabel('就业率')
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+# 3. 不同第三产业就业占比下机器人密度对就业率的影响图（箱线图）
+# 若IO为连续变量，建议分箱
+if data['IO'].nunique() > 10:
+    data['IO_bin'] = pd.qcut(data['IO'], 4, labels=['低', '中低', '中高', '高'])
+    x_col = 'IO_bin'
+    xlabel = '第三产业就业占比分组'
+else:
+    x_col = 'IO'
+    xlabel = '第三产业就业占比'
+plt.figure(figsize=(10, 6))
+sns.boxplot(x=x_col, y=dependent_variable, data=data, palette='viridis')
+plt.title('第三产业就业占比对机器人替代效应的影响（H4）')
+plt.xlabel(xlabel)
+plt.ylabel('就业率')
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+# 4. 时间滞后对就业率的影响图（折线图）
+if 'Lag' in data.columns:
+    plt.figure(figsize=(10, 6))
+    plt.plot(data['Lag'], data[dependent_variable], marker='o')
+    plt.title('时间滞后对就业率的影响（H5）')
+    plt.xlabel('时间滞后（年）')
+    plt.ylabel('就业率')
+    plt.grid(True, axis='y')
+    plt.tight_layout()
+    plt.show()
+
+# 5. 相关性矩阵热力图
+plt.figure(figsize=(12, 10))
+corr_matrix = data[[dependent_variable, independent_variable, mediator_variable] + control_variables].corr()
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', square=True)
+plt.title('变量之间的相关性矩阵')
+plt.show()
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AI岗位占比分布图</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+  <style>
+    .container {
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+      background: #f5f5f5;
+      min-height: 100vh;
+    }
+    .chart-container {
+      flex: 2;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+    .data-table {
+      flex: 1;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      min-width: 400px;
+    }
+    .data-table h2 {
+      color: #1e3799;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      background: #f8f9fa;
+      color: #1e3799;
+      font-weight: bold;
+    }
+    tr:hover {
+      background: #f8f9fa;
+    }
+    .growth {
+      color: #52c41a;
+    }
+    .decline {
+      color: #ff4d4f;
+    }
+    .city-pin {
+      cursor: pointer;
+    }
+    .city-pin:hover {
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="main" class="chart-container"></div>
+    <div class="data-table">
+      <h2>AI岗位占比数据表</h2>
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th>城市</th>
+            <th>2023年占比</th>
+            <th>2024年占比</th>
+            <th>增长率</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const cityCoords = {
+      "北京": [116.4075, 39.9040],
+      "天津": [117.1994, 39.0851],
+      "西安": [108.9398, 34.3416],
+      "成都": [104.0665, 30.5723],
+      "上海": [121.4737, 31.2304],
+      "南京": [118.7969, 32.0603],
+      "苏州": [120.5853, 31.2998],
+      "武汉": [114.2986, 30.5843],
+      "长沙": [112.9388, 28.2278],
+      "深圳": [114.0579, 22.5431],
+      "广州": [113.2644, 23.1291],
+      "合肥": [117.2274, 31.8206]
+    };
+
+    const data = [
+      { name: "北京", 2023: 4.92, 2024: 5.29 },
+      { name: "天津", 2023: 2.02, 2024: 2.12 },
+      { name: "西安", 2023: 2.66, 2024: 2.80 },
+      { name: "成都", 2023: 2.55, 2024: 2.85 },
+      { name: "上海", 2023: 3.79, 2024: 4.73 },
+      { name: "南京", 2023: 3.03, 2024: 3.72 },
+      { name: "苏州", 2023: 2.89, 2024: 3.14 },
+      { name: "武汉", 2023: 2.41, 2024: 2.47 },
+      { name: "长沙", 2023: 2.35, 2024: 2.43 },
+      { name: "深圳", 2023: 4.01, 2024: 4.27 },
+      { name: "广州", 2023: 2.36, 2024: 2.97 },
+      { name: "合肥", 2023: 2.58, 2024: 2.67 }
+    ];
+
+    // 初始化表格
+    function initTable() {
+      const tbody = document.querySelector('#dataTable tbody');
+      data.forEach(item => {
+        const growth = ((item['2024'] - item['2023']) / item['2023'] * 100).toFixed(2);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.name}</td>
+          <td>${item['2023']}%</td>
+          <td>${item['2024']}%</td>
+          <td class="${growth > 0 ? 'growth' : 'decline'}">${growth}%</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    const chart = echarts.init(document.getElementById('main'));
+
+    // 预处理数据：计算增长率并确定标签位置
+    const seriesData = data.map(d => {
+      const growthRate = (d['2024'] - d['2023']) / d['2023'];
+      return {
+        name: d.name,
+        value: [...cityCoords[d.name], d['2024']],
+        itemStyle: {
+          color: growthRate > 0.1 ? '#52c41a' : 
+                 growthRate > 0 ? '#1890ff' : '#ff4d4f'
+        },
+        label: {
+          position: growthRate > 0.1 ? 'top' : 'bottom',
+          distance: growthRate > 0.1 ? 8 : 8
+        }
+      };
+    });
+
+    const option = {
+      title: {
+        text: '2023-2024上半年人工智能岗位分布',
+        left: 'center',
+        top: 10,
+        textStyle: { 
+          color: '#222',
+          fontSize: 22,
+          fontWeight: 'bold'
+        }
+      },
+      geo: {
+        map: 'China',
+        roam: true,
+        layoutSize: '90%',
+        layoutCenter: ['50%', '55%'],
+        itemStyle: {
+          areaColor: 'transparent',
+          borderColor: '#1e3799',
+          borderWidth: 2
+        },
+        emphasis: {
+          itemStyle: {
+            areaColor: 'transparent'
+          }
+        },
+        label: {
+          show: false
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: function(params) {
+          if (params.seriesType === 'scatter') {
+            const item = data.find(d => d.name === params.name);
+            const growth = ((item['2024'] - item['2023']) / item['2023'] * 100).toFixed(2);
+            return `${params.name}<br/>
+                    2024年：${item['2024']}%<br/>
+                    2023年：${item['2023']}%<br/>
+                    增长率：${growth}%`;
+          }
+          return params.name;
+        }
+      },
+      graphic: [
+        {
+          type: 'text',
+          left: '5%',
+          bottom: '5%',
+          style: {
+            text: 'AI岗位占比=该城市AI岗位招聘数量/该城市所有岗位招聘数量',
+            font: '12px Microsoft YaHei',
+            fill: '#666',
+            textAlign: 'left'
+          }
+        }
+      ],
+      series: [
+        {
+          type: 'scatter',
+          coordinateSystem: 'geo',
+          symbol: 'pin',
+          symbolSize: 25,
+          itemStyle: { 
+            color: params => params.data.itemStyle.color
+          },
+          label: {
+            show: true,
+            formatter: '{b}',
+            color: '#222',
+            fontSize: 12,
+            fontWeight: 'bold',
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+            padding: [2, 4],
+            borderRadius: 4,
+            fontFamily: 'Microsoft YaHei'
+          },
+          data: seriesData
+        }
+      ]
+    };
+
+    // 加载地图数据
+    fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
+      .then(response => response.json())
+      .then(geoJson => {
+        echarts.registerMap('China', geoJson);
+        chart.setOption(option);
+        initTable();
+      });
+
+    // 响应式调整
+    window.addEventListener('resize', function() {
+      chart.resize();
+    });
+  </script>
+</body>
+</html>
