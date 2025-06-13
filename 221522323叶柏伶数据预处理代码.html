@@ -1,0 +1,63 @@
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+# 读取Excel文件
+file_path = '20250531论文数据（新）.xlsx'  # 请替换为实际文件路径
+df = pd.read_excel(file_path)
+
+# 打印原始列名以检查实际列数
+print("原始列名：")
+print(df.columns.tolist())
+
+# 检查是否有重复的列名
+print("\n重复的列名：")
+print(df.columns[df.columns.duplicated()])
+
+# 如果列名重复，可以尝试重命名重复的列
+# df.columns = pd.io.parsers.ParserBase({'names': df.columns})._maybe_dedup_names(df.columns)
+
+# 重命名列名（根据数据内容，确保列名数量与数据列数匹配）
+# 根据实际列数调整下面的列名列表
+columns = [
+    'city', 'year', 'employment_rate', 'robot_density', 'robot_stock',
+    'ai_companies', 'low_skill_labor_ratio', 'gdp', 'gov_support',
+    'industry_optimization', 'population_density', 'avg_education'
+]
+
+# 确保列名数量与数据列数匹配
+if len(columns) == len(df.columns):
+    df.columns = columns
+else:
+    print(f"\n列名数量不匹配：数据有 {len(df.columns)} 列，但提供了 {len(columns)} 个列名。")
+    # 如果列名数量不匹配，可以根据实际情况调整列名
+    # 或者使用默认的列名进行后续处理
+
+# 检查缺失值
+print("\n缺失值情况：")
+print(df.isnull().sum())
+
+# 填补缺失值（使用列的均值）
+for col in df.columns:
+    if df[col].dtype in [np.float64, np.int64] and df[col].isnull().any():
+        df[col].fillna(df[col].mean(), inplace=True)
+
+# 检查异常值（使用Z-score方法）
+# 仅对数值列进行异常值检测
+numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+# 计算Z-score
+z_scores = np.abs(stats.zscore(df[numeric_cols]))
+
+# 找出异常值
+outliers = (z_scores > 3).any(axis=1)
+print("\n异常值数量：", outliers.sum())
+
+# 处理异常值（将异常值替换为列的均值）
+for col in numeric_cols:
+    col_z_scores = np.abs(stats.zscore(df[col]))
+    df[col] = np.where(col_z_scores > 3, df[col].mean(), df[col])
+
+# 保存预处理后的数据到桌面
+df.to_excel(preprocessed_file_path, index=False)
+print(f"\n预处理后的数据已保存到桌面：{preprocessed_file_path}")
